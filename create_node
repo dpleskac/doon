@@ -1,0 +1,13 @@
+#!/bin/bash
+#
+# ./create_node s1 vtep1 192.168.2.101 192.168.2.102
+# ./create_node s2 vtep2 192.168.2.102 192.168.2.101
+
+SWITCH=$1
+VXLANIFNAME=$2
+LOCAL_IP=$3
+REMOTE_IP=$4
+
+sudo ifconfig $SWITCH $LOCAL_IP/24
+
+sudo ovs-vsctl add-port $SWITCH $VXLANIFNAME -- set interface $VXLANIFNAME type=vxlan option:local_ip=$LOCAL_IP option:remote_ip=$REMOTE_IP option:key=flow ofport_request=10

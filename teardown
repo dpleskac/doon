@@ -1,0 +1,7 @@
+#./create_node s1 vtep1 192.168.2.101 192.168.2.102
+#./create_node s2 vtep2 192.168.2.102 192.168.2.101
+
+./host disconnect 00:00:00:00:00:01 1.0.0.1 1 s1
+./host disconnect 00:00:00:00:00:02 1.0.0.2 2 s1
+./host disconnect 00:00:00:00:00:03 1.0.0.3 1 s2
+./host disconnect 00:00:00:00:00:04 1.0.0.4 2 s2
