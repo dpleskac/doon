@@ -35,15 +35,15 @@ esac
 ## declare ovswitch flows for each host
 declare -a flows=( \
     # ingress local L2 switching
-    "table=0,dl_dst=$MACADDR,actions=output:$PORT" \
-    "table=0,arp,nw_dst=$IPADDR,actions=output:$PORT" \
+    "priority=10,table=0,dl_dst=$MACADDR,actions=output:$PORT" \
+    "priority=10,table=0,arp,nw_dst=$IPADDR,actions=output:$PORT" \
 
     # ingress remote L2 switching
-    "table=0,tun_id=$VXLANID,dl_dst=$MACADDR,actions=output:$PORT" \
-    "table=0,tun_id=$VXLANID,arp,nw_dst=$IPADDR,actions=output:$PORT" \
+    "priority=10,table=0,tun_id=$VXLANID,dl_dst=$MACADDR,actions=output:$PORT" \
+    "priority=10,table=0,tun_id=$VXLANID,arp,nw_dst=$IPADDR,actions=output:$PORT" \
 
     # egress remote L2 switching
-    "table=0,in_port=$PORT,actions=set_field:$VXLANID->tun_id,output:$VTEP_PORT" \
+    "priority=10,table=0,in_port=$PORT,actions=set_field:$VXLANID->tun_id,output:$VTEP_PORT" \
 
     # TODO - do I need default drop?
     #"table=0,priority=100,actions=drop"
