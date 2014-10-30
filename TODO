@@ -1,3 +1,5 @@
+TODO:
+-----
 
 * node 
 	- create ovswitch, add ethX, move IP/route to pvs
@@ -10,3 +12,9 @@
 	- remove pipework dependency
 
 * self learning VXLAN switch - learns remote address -> create_node done on leave nodes, not on switch (simpler config)
+
+
+Open Questions:
+---------------
+
+* is STP enabled in ovs?
