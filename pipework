@@ -164,13 +164,6 @@ else
   }
 fi
 
-# Check if an incompatible VLAN device already exists
-[ $IFTYPE = phys ] && [ "$VLAN" ] && [ -d /sys/class/net/$IFNAME.VLAN ] && {
-    [ -z "$(ip -d link show $IFNAME.$VLAN | grep "vlan.*id $VLAN")" ] && {
-        echo "$IFNAME.VLAN already exists but is not a VLAN device for tag $VLAN"
-        exit 1
-    }
-}
 
 [ ! -d /var/run/netns ] && mkdir -p /var/run/netns
 [ -f /var/run/netns/$NSPID ] && rm -f /var/run/netns/$NSPID
@@ -179,6 +172,7 @@ ln -s /proc/$NSPID/ns/net /var/run/netns/$NSPID
 
 # Check if we need to create a bridge.
 [ $IFTYPE = bridge ] && [ ! -d /sys/class/net/$IFNAME ] && {
+#TODO print error
     (ip link add dev $IFNAME type bridge > /dev/null 2>&1) || (brctl addbr $IFNAME)
     ip link set $IFNAME up
 }
@@ -200,20 +194,6 @@ MTU=$(ip link show $IFNAME | awk '{print $5}')
     ip link set $LOCAL_IFNAME up
 }
 
-# If it's a physical interface, create a macvlan subinterface
-[ $IFTYPE = phys ] && {
-    [ "$VLAN" ] && {
-        [ ! -d /sys/class/net/$IFNAME.$VLAN ] && {
-            ip link add link $IFNAME name $IFNAME.$VLAN mtu $MTU type vlan id $VLAN
-        }
-
-        ip link set $IFNAME up
-        IFNAME=$IFNAME.$VLAN
-    }
-    GUEST_IFNAME=ph$NSPID$CONTAINER_IFNAME
-    ip link add link $IFNAME dev $GUEST_IFNAME mtu $MTU type macvlan mode bridge
-    ip link set $IFNAME up
-}
 
 ip link set $GUEST_IFNAME netns $NSPID
 ip netns exec $NSPID ip link set $GUEST_IFNAME name $CONTAINER_IFNAME

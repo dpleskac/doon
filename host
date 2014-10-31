@@ -33,21 +33,61 @@ case $1 in
 esac
 
 ## declare ovswitch flows for each host
+# 0 - ACL
+#   dl_src valid; goto 1
+#   tun_id valid; goto 1
+#   drop
+# 1 - L2 local<->local, local<->vtep
+#   dl_dst valid, output
+#   arp target valid, output
+#   local in_port valid, set tun_id, output vtep
+#   goto 2
+# 2 - L2 vtep<->vtep
+#   vtep port valid, set tun_id, flood other vteps 
 declare -a flows=( \
-    # ingress local L2 switching
-    "table=0,dl_dst=$MACADDR,priority=10,actions=output:$PORT" \
-    "table=0,arp,nw_dst=$IPADDR,priority=10,actions=output:$PORT" \
+    # ACL table
+    "table=0,dl_src=$MACADDR,priority=10,actions=resubmit(,1)" \
+    "table=0,tun_id=$VXLANID,priority=10,actions=resubmit(,1)" \
+    "table=0,priority=5,actions=drop" \
 
-    # ingress remote L2 switching
-    "table=0,tun_id=$VXLANID,dl_dst=$MACADDR,priority=10,actions=output:$PORT" \
-    "table=0,tun_id=$VXLANID,arp,nw_dst=$IPADDR,priority=10,actions=output:$PORT" \
+    # L2 switching local->local, vtep->local
+    "table=1,dl_dst=$MACADDR,priority=10,actions=output:$PORT" \
+    "table=1,arp,nw_dst=$IPADDR,priority=10,actions=output:$PORT" \
 
-    # egress remote L2 switching
-    "table=0,in_port=$PORT,priority=10,actions=set_field:$VXLANID->tun_id,output:$VTEP_PORT" \
+    # L2 switching local->vtep
+    "table=1,in_port=$PORT,priority=10,actions=set_field:$VXLANID->tun_id,output:$VTEP_PORT" \
 
-    # TODO - do I need default drop?
-    #"table=0,priority=100,actions=drop"
+    # leftovers, should be vtep->vtep
+    "table=1,priority=5,actions=drop" \
 )
+
+declare -a flows_per_host=( \
+    # ACL table
+    "table=0,dl_src=$MACADDR,priority=10,actions=resubmit(,1)" \
+
+    # L2 switching local->local, vtep->local
+    "table=1,dl_dst=$MACADDR,priority=10,actions=output:$PORT" \
+    "table=1,arp,nw_dst=$IPADDR,priority=10,actions=output:$PORT" \
+
+    # L2 switching local->vtep
+    "table=1,in_port=$PORT,priority=10,actions=set_field:$VXLANID->tun_id,output:$VTEP_PORT" \
+
+    # leftovers, should be vtep->vtep
+)
+
+declare -a flows_per_node=( \
+    # ACL table
+    "table=0,tun_id=$VXLANID,priority=10,actions=resubmit(,1)" \
+    "table=0,priority=5,actions=drop" \
+
+    # L2 switching local->local, vtep->local
+
+    # L2 switching local->vtep
+
+    # leftovers, should be vtep->vtep
+    "table=1,priority=5,actions=drop" \
+)
+
 
 ## install flows
 for i in "${flows[@]}"

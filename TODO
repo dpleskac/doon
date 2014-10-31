@@ -1,13 +1,16 @@
 TODO:
 -----
 
-* CLI design
+* point to point
+
+* point to multipoint
+
+* consolidate CLIs
     - add-node, del-node
     - add-host, del-host
     - add-ep, del-ep
 
 * node 
-	- need to add priority=10 to existing rules (otherwise NORMAL takes precedense)
 	- need to add rule for local port (actions=output:LOCAL)
 
 * host connect
