@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# node [ create | destroy ] <interface> <remote ip>
+# node [ create | destroy ] <local ip> <remote ip>
 #
 # sudo ./node create eth0 128.107.155.26
 # sudo ./node destroy eth0 
@@ -11,27 +11,19 @@
 
 SWITCH="doon"
 VXLANID="100"
-VXLANIFNAME="vtep-"$VXLANID
-PHYS_IF=$2
+VXLANIFNAME="vtep-"$VXLANID"-0"
+LOCAL_IP=$2
 REMOTE_IP=$3
 TEPPORT=10
 
 function switch_create {
-    # cache IP address, gateway
-    LOCAL_IP=$(ip addr show dev $PHYS_IF | grep "inet " | awk '{print $2}')
-    DEFAULT_GW=$(ip route show default | grep default | awk '{print $3}')
-    MACADDR=$(ip link show dev eth0 | grep "link/ether" | awk '{print $2}')
-    echo "Phys interface $PHYS_IF @ $LOCAL_IP via $DEFAULT_GW"
-
     echo "Creating bridge $SWITCH"
     ovs-vsctl add-br $SWITCH
-    echo "Adding port $PHYS_IF to bridge $SWITCH"
-    ovs-vsctl add-port $SWITCH $PHYS_IF
+    # remove normal flow added automatically after add-br
+    ovs-ofctl del-flows $SWITCH
 
     # set IP address, gateway
-    ip addr del $LOCAL_IP dev $PHYS_IF 
     ip addr add $LOCAL_IP dev $SWITCH 
-    ip route add default via $DEFAULT_GW
     LOCAL_IP=$(ip addr show dev $SWITCH | grep "inet " | awk '{print $2}')
     DEFAULT_GW=$(ip route show default | grep default | awk '{print $3}')
     echo "Bridge interface $SWITCH @ $LOCAL_IP via $DEFAULT_GW"
@@ -41,26 +33,17 @@ function switch_create {
     ovs-vsctl add-port $SWITCH $VXLANIFNAME -- set interface $VXLANIFNAME type=vxlan option:remote_ip=$REMOTE_IP option:key=flow ofport_request=$TEPPORT
 
     # declare default switch flows to connect IP stack
-#    ovs-ofctl add-flow $SWITCH "table=0,priority=10,dl_dst=$MACADDR,actions=output:LOCAL"
-#    ovs-ofctl add-flow $SWITCH "table=0,priority=10,arp,nw_dst=$LOCAL_IP,actions=output:LOCAL"
+#FIXME add vtep<->local flows
+    MACADDR=$(ip link show dev $SWITCH | grep "link/ether" | awk '{print $2}')
+    LOCAL_IP=$(ip addr show dev $SWITCH | grep "inet " | awk '{print $2}' | cut -d/ -f1)
+    ovs-ofctl add-flow $SWITCH "table=0,priority=10,dl_dst=$MACADDR,actions=output:LOCAL"
+    ovs-ofctl add-flow $SWITCH "table=0,priority=10,arp,nw_dst=$LOCAL_IP,actions=output:LOCAL"
 }
 
 function switch_destroy {
-    # cache IP address, gateway
-    LOCAL_IP=$(ip addr show dev $SWITCH | grep "inet " | awk '{print $2}')
-    DEFAULT_GW=$(ip route show default | grep default | awk '{print $3}')
-    echo "Bridge interface $SWITCH @ $LOCAL_IP via $DEFAULT_GW"
-
     # delete the switch
     echo "Deleting bridge $SWITCH"
     ovs-vsctl del-br $SWITCH
-
-    # set IP address, gateway
-    ip addr add $LOCAL_IP dev $PHYS_IF 
-    ip route add default via $DEFAULT_GW
-    LOCAL_IP=$(ip addr show dev $PHYS_IF | grep "inet " | awk '{print $2}')
-    DEFAULT_GW=$(ip route show default | grep default | awk '{print $3}')
-    echo "Phys interface $PHYS_IF @ $LOCAL_IP via $DEFAULT_GW"
 }
 
 case $1 in

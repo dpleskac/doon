@@ -1,11 +1,14 @@
 TODO:
 -----
 
+* CLI design
+    - add-node, del-node
+    - add-host, del-host
+    - add-ep, del-ep
+
 * node 
-	- create ovswitch, add ethX, move IP/route to pvs
 	- need to add priority=10 to existing rules (otherwise NORMAL takes precedense)
 	- need to add rule for local port (actions=output:LOCAL)
-	- node destroy
 
 * host connect
 	- simplify rules - replace arp with broadcast flood?
