@@ -9,7 +9,10 @@
 # doon [ rm-host  ] <mac> <ip> <port>
 #
 # TODO:
+#   * first 8 ping packets gone, why?
 #   * add/rm-tunnel
+#   * do we need add-rm host then?
+#   * show
 
 SWITCH="doon"
 
@@ -38,48 +41,18 @@ function host_ops {
     # 2 - L2 vtep<->vtep
     #   vtep port valid, set tun_id, flood other vteps 
 
-    declare -a flows=( \
-        # ACL table
-        "table=0,dl_src=$MACADDR,priority=10,actions=resubmit(,1)" \
-        "table=0,tun_id=$VXLANID,priority=10,actions=resubmit(,1)" \
-        "table=0,priority=5,actions=drop" \
-
-        # L2 switching local->local, vtep->local
-        "table=1,dl_dst=$MACADDR,priority=10,actions=output:$PORT" \
-        "table=1,arp,nw_dst=$IPADDR,priority=10,actions=output:$PORT" \
-
-        # L2 switching local->vtep
-        "table=1,in_port=$PORT,priority=10,actions=set_field:$VXLANID->tun_id,output:$VTEP_PORT" \
-
-        # leftovers, should be vtep->vtep
-        "table=1,priority=5,actions=drop" \
-    )
-
     declare -a flows_per_host=( \
         # ACL table
         "table=0,dl_src=$MACADDR,priority=10,actions=resubmit(,1)" \
 
-        # L2 switching local->local, vtep->local
+        # L2 switching host->host, vtep->host
         "table=1,dl_dst=$MACADDR,priority=10,actions=output:$PORT" \
         "table=1,arp,nw_dst=$IPADDR,priority=10,actions=output:$PORT" \
 
-        # L2 switching local->vtep
+        # L2 switching host->vtep
         "table=1,in_port=$PORT,priority=10,actions=set_field:$VXLANID->tun_id,output:$VTEP_PORT" \
 
         # leftovers, should be vtep->vtep
-    )
-
-    declare -a flows_per_node=( \
-        # ACL table
-        "table=0,tun_id=$VXLANID,priority=10,actions=resubmit(,1)" \
-        "table=0,priority=5,actions=drop" \
-
-        # L2 switching local->local, vtep->local
-
-        # L2 switching local->vtep
-
-        # leftovers, should be vtep->vtep
-        "table=1,priority=5,actions=drop" \
     )
 
     case $1 in
@@ -99,7 +72,7 @@ function host_ops {
     esac
 
     ## install flows
-    for i in "${flows[@]}"
+    for i in "${flows_per_host[@]}"
     do
         FLOW_STR=$(echo $i | awk $FLOW_SPLIT '{print $1}')
 
@@ -115,6 +88,19 @@ function node_ops {
     LOCAL_IP=$2
     REMOTE_IP=$3
     TEPPORT=10
+
+    declare -a flows_per_node=( \
+        # ACL table
+        "table=0,tun_id=$VXLANID,priority=10,actions=resubmit(,1)" \
+        "table=0,priority=5,actions=drop" \
+
+        # L2 switching host->host, vtep->host
+
+        # L2 switching host->vtep
+
+        # leftovers, should be vtep->vtep
+        "table=1,priority=5,actions=drop" \
+    )
 
     function switch_create {
         echo "Creating bridge $SWITCH"
@@ -132,12 +118,18 @@ function node_ops {
         echo "Adding VXLAN port $VXLANIFNAME to bridge $SWITCH"
         ovs-vsctl add-port $SWITCH $VXLANIFNAME -- set interface $VXLANIFNAME type=vxlan option:remote_ip=$REMOTE_IP option:key=flow ofport_request=$TEPPORT
 
-        # declare default switch flows to connect IP stack
+        # create default switch flows
     #FIXME add vtep<->local flows
         MACADDR=$(ip link show dev $SWITCH | grep "link/ether" | awk '{print $2}')
         LOCAL_IP=$(ip addr show dev $SWITCH | grep "inet " | awk '{print $2}' | cut -d/ -f1)
-        ovs-ofctl add-flow $SWITCH "table=0,priority=10,dl_dst=$MACADDR,actions=output:LOCAL"
-        ovs-ofctl add-flow $SWITCH "table=0,priority=10,arp,nw_dst=$LOCAL_IP,actions=output:LOCAL"
+       # ovs-ofctl add-flow $SWITCH "table=0,priority=10,dl_dst=$MACADDR,actions=output:LOCAL"
+       # ovs-ofctl add-flow $SWITCH "table=0,priority=10,arp,nw_dst=$LOCAL_IP,actions=output:LOCAL"
+
+        ## install flows
+        for i in "${flows_per_node[@]}"
+        do
+            sudo ovs-ofctl add-flow $SWITCH $i
+        done
     }
 
     function switch_destroy {
