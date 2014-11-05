@@ -221,8 +221,8 @@ fi
     OVSPORT=$(ovs-ofctl show $IFNAME | grep $LOCAL_IFNAME | cut -d'(' -f1)
 
     echo "pid $NSPID host_connect $OVSMACADDR $OVSIPADDR $OVSPORT $IFNAME"
-    ./host connect $OVSMACADDR $OVSIPADDR $OVSPORT $IFNAME
-    (while [ -d /proc/$NSPID ]; do sleep 1; done; ./host disconnect $OVSMACADDR $OVSIPADDR $OVSPORT $IFNAME; echo "$NSPID torn-down!")&
+    ./doon add-host $OVSMACADDR $OVSIPADDR $OVSPORT $IFNAME
+    (while [ -d /proc/$NSPID ]; do sleep 1; done; ./doon rm-host $OVSMACADDR $OVSIPADDR $OVSPORT $IFNAME; echo "$NSPID torn-down!")&
 }
 
 # Give our ARP neighbors a nudge about the new interface

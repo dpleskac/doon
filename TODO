@@ -5,13 +5,13 @@ TODO:
 
 * point to multipoint
 
-* consolidate CLIs
-    - add-node, del-node
-    - add-host, del-host
-    - add-ep, del-ep
+* CLIs
+    - add-tunnel, del-tunnel
+    - show node, host, tunnel
 
-* node 
+* shall I eliminate local connection? YES! 
 	- need to add rule for local port (actions=output:LOCAL)
+
 
 * host connect
 	- simplify rules - replace arp with broadcast flood?
