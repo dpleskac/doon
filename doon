@@ -2,14 +2,13 @@
 #
 # doon [ add-node | rm-node | add-host | rm-host ]
 #
-# doon [ add-node ] <local ip> <remote ip>
+# doon [ add-node ] <remote ip>
 # doon [ rm-node  ]
 #
 # doon [ add-host ] <mac> <ip> <port>
 # doon [ rm-host  ] <mac> <ip> <port>
 #
 # TODO:
-#   * first 8 ping packets gone, why?
 #   * add/rm-tunnel
 #   * do we need add-rm host then?
 #   * show
@@ -39,7 +38,7 @@ function host_ops {
     #   local in_port valid, set tun_id, output vtep
     #   goto 2
     # 2 - L2 vtep<->vtep
-    #   vtep port valid, set tun_id, flood other vteps 
+    #   vtep port valid, set tun_id, flood to other vteps 
 
     declare -a flows_per_host=( \
         # ACL table
@@ -85,8 +84,7 @@ function host_ops {
 function node_ops {
     VXLANID="100"
     VXLANIFNAME="vtep-"$VXLANID"-0"
-    LOCAL_IP=$2
-    REMOTE_IP=$3
+    REMOTE_IP=$2
     TEPPORT=10
 
     declare -a flows_per_node=( \
@@ -108,24 +106,11 @@ function node_ops {
         # remove normal flow added automatically after add-br
         ovs-ofctl del-flows $SWITCH
 
-        # set IP address, gateway
-        ip addr add $LOCAL_IP dev $SWITCH 
-        LOCAL_IP=$(ip addr show dev $SWITCH | grep "inet " | awk '{print $2}')
-        DEFAULT_GW=$(ip route show default | grep default | awk '{print $3}')
-        echo "Bridge interface $SWITCH @ $LOCAL_IP via $DEFAULT_GW"
-
         # create tunnel port
         echo "Adding VXLAN port $VXLANIFNAME to bridge $SWITCH"
         ovs-vsctl add-port $SWITCH $VXLANIFNAME -- set interface $VXLANIFNAME type=vxlan option:remote_ip=$REMOTE_IP option:key=flow ofport_request=$TEPPORT
 
         # create default switch flows
-    #FIXME add vtep<->local flows
-        MACADDR=$(ip link show dev $SWITCH | grep "link/ether" | awk '{print $2}')
-        LOCAL_IP=$(ip addr show dev $SWITCH | grep "inet " | awk '{print $2}' | cut -d/ -f1)
-       # ovs-ofctl add-flow $SWITCH "table=0,priority=10,dl_dst=$MACADDR,actions=output:LOCAL"
-       # ovs-ofctl add-flow $SWITCH "table=0,priority=10,arp,nw_dst=$LOCAL_IP,actions=output:LOCAL"
-
-        ## install flows
         for i in "${flows_per_node[@]}"
         do
             sudo ovs-ofctl add-flow $SWITCH $i
@@ -148,7 +133,7 @@ case $1 in
         ;;
 
     *)
-        echo "Usage: node [ create | destroy ] <interface> <remote ip>"
+        echo "Usage: node [ create | destroy ] <remote ip>"
         exit 1
 esac
 
@@ -160,7 +145,7 @@ case $1 in
         ;;
 
     add-node | rm-node)
-        node_ops $1 $2 $3
+        node_ops $1 $2
         ;;
 
     *)

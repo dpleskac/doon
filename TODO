@@ -1,21 +1,15 @@
 TODO:
 -----
 
-* point to point
-
 * point to multipoint
 
 * CLIs
     - add-tunnel, del-tunnel
     - show node, host, tunnel
 
-* shall I eliminate local connection? YES! 
-	- need to add rule for local port (actions=output:LOCAL)
+* remove pipework dependency
 
-
-* host connect
-	- simplify rules - replace arp with broadcast flood?
-	- remove pipework dependency
+* simplify rules - replace arp with broadcast flood?
 
 * self learning VXLAN switch - learns remote address -> create_node done on leave nodes, not on switch (simpler config)
 
