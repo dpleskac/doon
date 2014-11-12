@@ -222,7 +222,7 @@ fi
 
     echo "pid $NSPID host_connect $OVSMACADDR $OVSIPADDR $OVSPORT $IFNAME"
     ./doon add-host $OVSMACADDR $OVSIPADDR $OVSPORT $IFNAME
-    (while [ -d /proc/$NSPID ]; do sleep 1; done; ./doon rm-host $OVSMACADDR $OVSIPADDR $OVSPORT $IFNAME; echo "$NSPID torn-down!")&
+    (while [ -d /proc/$NSPID ]; do sleep 1; done; ./doon del-host $OVSMACADDR $OVSIPADDR $OVSPORT $IFNAME; echo "$NSPID torn-down!")&
 }
 
 # Give our ARP neighbors a nudge about the new interface

@@ -1,21 +1,22 @@
 #!/bin/bash
 #
-# doon [ add-node | rm-node | add-host | rm-host ]
+# doon [ add-node | del-node | add-host | del-host ]
 #
-# doon [ add-node ] <remote ip>
-# doon [ rm-node  ]
+# doon [ add-node ] 
+# doon [ del-node ]
+#
+# doon [ add-tunnel ] <remote_ip>
+# doon [ del-tunnel ] <remote_ip>
 #
 # doon [ add-host ] <mac> <ip> <port>
-# doon [ rm-host  ] <mac> <ip> <port>
+# doon [ del-host ] <mac> <ip> <port>
 #
 # TODO:
-#   * add/rm-tunnel (same vxlan)
-#       - create vtep
-#       - add flows_per_vtep
+#   * add/del-tunnel (same vxlan)
 #       - modify flows_per_host
-#   * add/rm-tunnel (new vxlan)
+#   * add/del-tunnel (new vxlan)
 #   * must be sudo
-#   * do we need add-rm host then?
+#   * do we need add-rm node then?
 #   * show
 #   * rm inet6 from doon switch if
 
@@ -26,11 +27,10 @@ function host_ops {
     IPADDR=$3
     PORT=$4
     VXLANID=100
+    VXLANVTEP="vtep-"$VXLANID
 
-    # FIXME
-    VTEP_PORT=$(sudo ovs-ofctl show $SWITCH | grep vtep | cut -d'(' -f1)
-    VTEP_PORT=10
-
+    VTEP_PORT_LIST=$(sudo ovs-ofctl show $SWITCH | grep $VXLANVTEP | cut -d'(' -f1 )
+    VTEP_PORTS=$(echo $VTEP_PORT_LIST | sed s/" "/,/g)
 
     # ovswitch flow scheme:
     #
@@ -55,7 +55,7 @@ function host_ops {
         "table=1,arp,nw_dst=$IPADDR,priority=10,actions=output:$PORT" \
 
         # L2 switching host->vtep
-        "table=1,in_port=$PORT,priority=10,actions=set_field:$VXLANID->tun_id,output:$VTEP_PORT" \
+        "table=1,in_port=$PORT,priority=10,actions=set_field:$VXLANID->tun_id,output:$VTEP_PORTS" \
 
         # leftovers, should be vtep->vtep
     )
@@ -66,7 +66,7 @@ function host_ops {
             FLOW_SPLIT=""
             ;;
 
-        rm-host)
+        del-host)
             OP="del-flows"
             FLOW_SPLIT="-F ,priority"
             ;;
@@ -81,7 +81,7 @@ function host_ops {
     do
         FLOW_STR=$(echo $i | awk $FLOW_SPLIT '{print $1}')
 
-        #echo sudo ovs-ofctl $OP $SWITCH $FLOW_STR
+        echo sudo ovs-ofctl $OP $SWITCH $FLOW_STR
         sudo ovs-ofctl $OP $SWITCH $FLOW_STR
     done
 }
@@ -103,30 +103,31 @@ function tunnel_ops {
         # find first available vtep name
         for i in {0..1000}
         do 
-            # DEBUG
-            echo $i
-            [ "$(ovs-ofctl show doon | grep "$VXLANVTEP-$i" | cut -d'(' -f2 | cut -d')' -f1)" == "" ] && break
+            VXLANIFNAME=$VXLANVTEP-$i
+            [ "$(ovs-ofctl show doon | grep "$VXLANIFNAME" | cut -d'(' -f2 | cut -d')' -f1)" == "" ] && break
         done
 
-        VXLANIFNAME=$VXLANVTEP-$i
 
         echo "Adding VXLAN port $VXLANIFNAME to bridge $SWITCH"
         ovs-vsctl add-port $SWITCH $VXLANIFNAME -- set interface $VXLANIFNAME type=vxlan option:remote_ip=$REMOTE_IP option:key=flow
 
+        #FIXME - for existing hosts, need to add output to another vtep port
+
         # add per_tunnel flows
         for i in "${flows_per_tunnel[@]}"
         do
+            # FIXME - if already exists, don't bother
             sudo ovs-ofctl add-flow $SWITCH $i
         done
     }
 
-    function rm_tunnel {
+    function del_tunnel {
         # search for vtep with <remote ip>
         vtep_ifs=$(ovs-vsctl list-ports doon | grep vtep-)
         for vtep in $vtep_ifs
         do 
-            RIP=$(ovs-vsctl get interface $vtep option:remote_ip 2>/dev/null) && \
-            [ "$RIP" == "\"$REMOTE_IP"\" ] && echo "Removing $vtep" && TARGET_VTEP_IF=$vtep && break
+            VTEP_IP=$(ovs-vsctl get interface $vtep option:remote_ip 2>/dev/null) && \
+            [ "$VTEP_IP" == "\"$REMOTE_IP"\" ] && echo "Removing $vtep" && TARGET_VTEP_IF=$vtep && break
         done
 
         [ "$TARGET_VTEP_IF" != "" ] && ovs-vsctl del-port $SWITCH $TARGET_VTEP_IF
@@ -138,26 +139,21 @@ function tunnel_ops {
             add_tunnel
             ;;
 
-        rm-tunnel)
-            rm_tunnel
+        del-tunnel)
+            del_tunnel
             ;;
 
         *)
-            echo "Usage: doon [ add-tunnel | rm-tunnel ] <remote ip>"
+            echo "Usage: doon [ add-tunnel | del-tunnel ] <remote ip>"
             exit 1
     esac
 
 }
 
 function node_ops {
-    REMOTE_IP=$2
-    VXLANID="100"
-    VXLANIFNAME="vtep-"$VXLANID"-0"
-    TEPPORT=10
 
     declare -a flows_per_node=( \
         # ACL table
-        "table=0,tun_id=$VXLANID,priority=10,actions=resubmit(,1)" \
         "table=0,priority=5,actions=drop" \
 
         # L2 switching host->host, vtep->host
@@ -173,10 +169,6 @@ function node_ops {
         ovs-vsctl add-br $SWITCH
         # remove normal flow added automatically after add-br
         ovs-ofctl del-flows $SWITCH
-
-        # create tunnel port
-        echo "Adding VXLAN port $VXLANIFNAME to bridge $SWITCH"
-        ovs-vsctl add-port $SWITCH $VXLANIFNAME -- set interface $VXLANIFNAME type=vxlan option:remote_ip=$REMOTE_IP option:key=flow ofport_request=$TEPPORT
 
         # create default switch flows
         for i in "${flows_per_node[@]}"
@@ -196,7 +188,7 @@ function node_ops {
             switch_create
             ;;
 
-        rm-node)
+        del-node)
             switch_destroy
             ;;
 
@@ -208,15 +200,15 @@ function node_ops {
 }
 
 case $1 in
-    add-host | rm-host)
+    add-host | del-host )
         host_ops $1 $2 $3 $4
         ;;
 
-    add-node | rm-node)
-        node_ops $1 $2
+    add-node | del-node )
+        node_ops $1
         ;;
 
-    add-tunnel | rm-tunnel)
+    add-tunnel | del-tunnel )
         tunnel_ops $1 $2
         ;;
 
